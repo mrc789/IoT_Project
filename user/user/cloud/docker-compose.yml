@@ -1,0 +1,99 @@
+version: "3.9"
+services:
+  # Cloud MQTT Broker
+  cloud-mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: cloud-mosquitto
+    ports:
+      - "1884:1883"  # Expose on different port to avoid conflict with user's local mosquitto
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
+    networks:
+      - global_net
+
+  # Zookeeper - Required for Kafka
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - global_net
+
+  # Kafka Broker
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    networks:
+      - global_net
+
+  # InfluxDB - Time Series Database
+  influxdb:
+    image: influxdb:2.7
+    container_name: influxdb
+    ports:
+      - "8086:8086"
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: admin
+      DOCKER_INFLUXDB_INIT_PASSWORD: adminpassword
+      DOCKER_INFLUXDB_INIT_ORG: iot-org
+      DOCKER_INFLUXDB_INIT_BUCKET: iot-bucket
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: my-super-secret-auth-token
+    volumes:
+      - influxdb-data:/var/lib/influxdb2
+    networks:
+      - global_net
+
+  # Cloud Ingestor - MQTT to Kafka bridge
+  ingestor:
+    build: ./ingestor
+    container_name: cloud-ingestor
+    depends_on:
+      - cloud-mosquitto
+      - kafka
+    environment:
+      - MQTT_HOST=cloud-mosquitto
+      - MQTT_PORT=1883
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - KAFKA_TOPIC=sensor-raw-data
+    networks:
+      - global_net
+
+  # Pipeline P1 - Save Raw Data to InfluxDB
+  pipeline-p1:
+    build: ./pipeline-p1
+    container_name: pipeline-p1
+    depends_on:
+      - kafka
+      - influxdb
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - KAFKA_TOPIC=sensor-raw-data
+      - KAFKA_GROUP_ID=pipeline-p1-group
+      - INFLUXDB_URL=http://influxdb:8086
+      - INFLUXDB_TOKEN=my-super-secret-auth-token
+      - INFLUXDB_ORG=iot-org
+      - INFLUXDB_BUCKET=iot-bucket
+    networks:
+      - global_net
+
+networks:
+  global_net:
+    external: true
+
+volumes:
+  influxdb-data:
