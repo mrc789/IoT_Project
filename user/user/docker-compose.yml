@@ -64,7 +64,7 @@ services:
       - MQTT_HOST=mosquitto
       - CLOUD_MQTT_HOST=cloud-mosquitto
       - CLOUD_MQTT_PORT=1883
-      - USER_ID=user1
+      - USER_ID=${COMPOSE_PROJECT_NAME}
     depends_on:
       - mosquitto
     networks:
