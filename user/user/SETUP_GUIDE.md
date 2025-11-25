@@ -218,7 +218,7 @@ docker network rm global_net
 - **Function:** Distributed streaming platform
 - **Purpose:** Decouple data ingestion from processing pipelines
 
-### 6. Pipeline P1 - Save Raw Data ⭐
+### 6. Pipeline P1 - Save Raw Data 
 - **Technology:** Python with kafka-python + influxdb-client
 - **Function:** Consume from Kafka and save to InfluxDB
 - **Worth:** 25% of project points
